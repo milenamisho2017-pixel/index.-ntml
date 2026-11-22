@@ -12,7 +12,7 @@ header{display:flex;align-items:center;gap:2px;padding:10px 8px 10px 16px;border
 .t{flex:1;min-width:0}
 .t b{font-size:18px;display:block;line-height:1.2}
 #st{font-size:12px;color:#888;display:block}
-.ib{background:none;border:0;color:#ececec;font-size:20px;padding:6px 8px;border-radius:8px;cursor:pointer}
+.ib{background:none;border:0;color:#ececec;font-size:20px;padding:6px 7px;border-radius:8px;cursor:pointer}
 .ib:active{background:#333}
 .ib.off{opacity:.35}
 #msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px}
@@ -38,11 +38,38 @@ form{display:flex;gap:8px;padding:12px 16px calc(12px + env(safe-area-inset-bott
 #set button{background:#fff;border:0;border-radius:8px;padding:10px;font:inherit}
 #set button.gr{background:#444;color:#fff}
 label{display:flex;gap:8px;align-items:center}
+/* Студио */
+#stu{position:fixed;inset:0;background:#212121;display:none;flex-direction:column;overflow-y:auto;padding:0 14px 24px;z-index:5}
+.sh{display:flex;align-items:center;gap:8px;padding:12px 0;position:sticky;top:0;background:#212121;z-index:2}
+.tabs{display:flex;gap:6px;margin-bottom:10px}
+.tabs button{flex:1;padding:9px 2px;border:0;border-radius:10px;background:#2f2f2f;color:#ececec;font:inherit;font-size:14px}
+.tabs button.on{background:#fff;color:#000}
+#tray{display:flex;gap:8px;overflow-x:auto;padding:8px 4px;min-height:8px}
+.th{position:relative;flex:0 0 64px;height:64px}
+.th img{width:64px;height:64px;object-fit:cover;border-radius:10px;border:2px solid transparent;max-height:none;margin:0}
+.th.sel img{border-color:#fff}
+.th button{position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:0;background:#e5484d;color:#fff;font-size:12px;line-height:1}
+.bar{display:flex;gap:8px;margin:8px 0;flex-wrap:wrap}
+.sb{flex:1;padding:11px 8px;border:0;border-radius:10px;background:#2f2f2f;color:#ececec;font:inherit;min-width:90px}
+.sb.pri{background:#fff;color:#000;font-weight:600}
+.sb:disabled{opacity:.5}
+#stu select{flex:1;padding:10px;border-radius:10px;background:#2f2f2f;color:#ececec;border:0;font:inherit}
+.pn{display:none;flex-direction:column;gap:8px;margin:6px 0}
+.pn.on{display:flex}
+.pn label{justify-content:space-between;font-size:14px}
+.pn input[type=range]{flex:1;margin-left:10px}
+.pn input[type=text]{background:#2f2f2f;color:#fff;border:0;border-radius:10px;padding:10px;font:inherit}
+.pr{display:flex;gap:6px;flex-wrap:wrap}
+.pr button{padding:8px 12px;border:0;border-radius:16px;background:#2f2f2f;color:#ececec;font:inherit;font-size:13px}
+#cv,#vd{display:block;margin:10px auto;max-width:100%;max-height:58dvh;border-radius:12px;background:#111}
+#vd{display:none}
+#hint{text-align:center;color:#aaa;font-size:14px;min-height:20px}
 </style>
 </head>
 <body>
 <header>
   <div class="t"><b>🤖 Бот</b><span id="st"></span></div>
+  <button class="ib" id="art" title="Студио">🎨</button>
   <button class="ib" id="ear" title="Слушане">👂</button>
   <button class="ib" id="spk" title="Глас">🔊</button>
   <button class="ib" id="del" title="Изтрий чата">🗑️</button>
@@ -57,6 +84,7 @@ label{display:flex;gap:8px;align-items:center}
   <button class="c" id="send">➤</button>
 </form>
 <input type="file" id="file" accept="image/*" hidden>
+
 <div id="set"><div>
   <b>Настройки</b>
   <input type="password" id="key" placeholder="Anthropic API ключ">
@@ -68,8 +96,65 @@ label{display:flex;gap:8px;align-items:center}
   <button id="save" type="button">Запази</button>
 </div></div>
 
+<div id="stu">
+  <div class="sh"><button class="ib" id="sback">←</button><b>🎨 Студио</b></div>
+  <div class="tabs">
+    <button data-t="col" class="on">Колаж</button>
+    <button data-t="edit">Редакция</button>
+    <button data-t="land">Пейзаж</button>
+    <button data-t="vid">Видео</button>
+  </div>
+  <div id="tray"></div>
+  <div class="bar">
+    <button class="sb" id="addp">➕ Снимки</button>
+    <select id="asp">
+      <option value="1:1">Квадрат 1:1</option>
+      <option value="4:5">Портрет 4:5</option>
+      <option value="9:16">Вертикално 9:16</option>
+      <option value="16:9">Широко 16:9</option>
+    </select>
+  </div>
+
+  <div id="p-col" class="pn on">
+    <label>Разстояние<input type="range" id="cgap" min="0" max="40" value="12"></label>
+    <label>Фон<input type="color" id="cbg" value="#212121"></label>
+  </div>
+  <div id="p-edit" class="pn">
+    <div class="pr" id="pre">
+      <button data-p="orig">Оригинал</button><button data-p="bright">Ярко</button>
+      <button data-p="bw">Ч/Б</button><button data-p="retro">Ретро</button><button data-p="drama">Драма</button>
+    </div>
+    <label>Яркост<input type="range" min="50" max="150" value="100" data-k="b"></label>
+    <label>Контраст<input type="range" min="50" max="150" value="100" data-k="c"></label>
+    <label>Наситеност<input type="range" min="0" max="200" value="100" data-k="s"></label>
+    <label>Размазване<input type="range" min="0" max="10" value="0" data-k="blur"></label>
+    <label><span><input type="checkbox" data-k="sq"> Квадрат</span><span><input type="checkbox" data-k="vig"> Виньетка</span></label>
+    <button class="sb" id="rot">⟳ Завърти</button>
+    <input type="text" data-k="txt" placeholder="Текст върху снимката">
+  </div>
+  <div id="p-land" class="pn">
+    <select id="lsty"><option>Залез</option><option>Планина</option><option>Нощ</option><option>Есен</option><option>Море</option></select>
+    <div class="bar"><button class="sb" id="lnew">🔄 Друг пейзаж</button><button class="sb" id="ladd">➕ Към снимките</button></div>
+  </div>
+  <div id="p-vid" class="pn">
+    <label>Дължина<input type="range" id="vdur" min="5" max="30" value="15"><span id="vdv">15 с</span></label>
+    <label><span><input type="checkbox" id="vkb" checked> Плавно приближаване</span></label>
+    <input type="text" id="vtxt" placeholder="Заглавие във видеото (по желание)">
+  </div>
+
+  <div id="hint"></div>
+  <canvas id="cv" width="10" height="10"></canvas>
+  <video id="vd" controls playsinline></video>
+  <div class="bar">
+    <button class="sb pri" id="gen">Създай</button>
+    <button class="sb" id="sv">💾 Запази</button>
+    <button class="sb" id="shr">📤 Сподели</button>
+  </div>
+  <input type="file" id="files" accept="image/*" multiple hidden>
+</div>
+
 <script>
-const $=s=>document.querySelector(s);
+const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
 const get=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k));return v===null?d:v}catch{return d}};
 const put=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
 let chat=get('chat',[]), notes=get('notes',[]);
@@ -83,6 +168,7 @@ function status(){
   $('#spk').classList.toggle('off',!cfg.speak&&!speaking);
   $('#mic').classList.toggle('on',awaiting);
 }
+function dl(u,n){const a=document.createElement('a');a.href=u;a.download=n;document.body.appendChild(a);a.click();a.remove();}
 function add(role,text,img){
   const d=document.createElement('div');
   d.className='m '+(role==='user'?'u':role==='sys'?'sys':'a');
@@ -90,13 +176,38 @@ function add(role,text,img){
   d.appendChild(document.createTextNode(text));
   $('#msgs').appendChild(d);$('#msgs').scrollTop=1e9;return d;
 }
+function showReply(b,t){
+  const m=t.match(/<svg[\s\S]*?<\/svg>/i);
+  if(!m){b.textContent=t;return;}
+  b.textContent='';
+  const i=new Image();
+  i.style.cssText='width:100%;max-height:none;background:#fff;border-radius:12px;margin:4px 0';
+  i.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(m[0]);
+  b.appendChild(i);
+  const bt=document.createElement('button');
+  bt.textContent='💾 Запази като PNG';
+  bt.style.cssText='display:block;margin:6px 0;padding:8px 12px;border:0;border-radius:10px;background:#2f2f2f;color:#fff;font:inherit';
+  bt.onclick=()=>{
+    const w=1080,h=Math.round(w*(i.naturalHeight||1)/(i.naturalWidth||1));
+    const c=document.createElement('canvas');c.width=w;c.height=h;
+    const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,w,h);x.drawImage(i,0,0,w,h);
+    c.toBlob(bl=>dl(URL.createObjectURL(bl),'kartina-'+Date.now()+'.png'));
+  };
+  b.appendChild(bt);
+  const rest=t.replace(m[0],'').trim();
+  if(rest) b.appendChild(document.createTextNode(rest));
+}
 function render(){
   $('#msgs').innerHTML='';
   if(!chat.length) add('sys','Здравей! Аз съм Бот. Кажи „Бот“ или ми пиши.');
-  chat.forEach(m=>add(m.role,(m.img?'📷 ':'')+m.content));
+  chat.forEach(m=>{
+    if(m.role==='assistant'){const b=add('assistant','');showReply(b,m.content);}
+    else add(m.role,(m.img?'📷 ':'')+m.content);
+  });
 }
 function say(t){
   if(!cfg.speak||!window.speechSynthesis) return;
+  t=t.replace(/<svg[\s\S]*?<\/svg>/gi,' Картината е готова. ');
   const u=new SpeechSynthesisUtterance(t); u.lang='bg-BG';
   u.onstart=()=>{speaking=true;status();};
   u.onend=u.onerror=()=>{speaking=false;status();};
@@ -113,7 +224,7 @@ function local(t){
   return null;
 }
 
-/* Снимки */
+/* Снимка към чата */
 function toData(file){
   return new Promise((res,rej)=>{
     const img=new Image(), url=URL.createObjectURL(file);
@@ -153,16 +264,18 @@ async function send(text){
   chat.push({role:'user',content:q,img:!!p}); add('user',q,p);
   clearPic(); busy=true; status();
   const bubble=add('assistant','…'); let full='';
-  let msgs=chat.slice(-20).map(m=>({role:m.role,content:m.img?m.content+' [изпратена снимка]':m.content}));
+  let msgs=chat.slice(-20).map(m=>({role:m.role,content:(m.img?m.content+' [изпратена снимка]':m.content).replace(/<svg[\s\S]*?<\/svg>/gi,'[нарисувана картина]')}));
   while(msgs.length&&msgs[0].role!=='user') msgs.shift();
   if(p) msgs[msgs.length-1].content=[
     {type:'image',source:{type:'base64',media_type:'image/jpeg',data:p.split(',')[1]}},
     {type:'text',text:q}
   ];
-  const body={model:'claude-sonnet-5-5',max_tokens:1500,stream:true,
+  const body={model:'claude-sonnet-5-5',max_tokens:4000,stream:true,
     system:'Ти си Бот - гласов асистент. Отговаряй на български, точно и кратко. Ако не си сигурен, кажи го честно. '
       +'Не можеш да променяш настройките си или приложението и не твърдиш, че си го направил. '
       +(cfg.web?'Имаш достъп до интернет чрез търсене. За време, новини, цени, резултати и други актуални неща търси, не гадай. ':'')
+      +'Ако те помоля да нарисуваш картина, лого, пейзаж или схема, отговори с един пълен SVG (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080" width="1080" height="1080">...</svg>) и едно кратко изречение. '
+      +'Не можеш да създаваш истински снимки или видео с ИИ. За колажи, редакция на снимки и видео от снимки има бутон 🎨 Студио. '
       +'Ако потребителят иска да запомниш нещо, кажи му да напише "запиши ...". '
       +(cfg.instr?'Инструкции от потребителя: '+cfg.instr+'. ':'')
       +'Записи на потребителя: '+(notes.join('; ')||'няма'),
@@ -190,16 +303,19 @@ async function send(text){
             else if(t==='text'&&full&&!full.endsWith('\n')) full+='\n\n';
           }
           if(j.type==='content_block_delta'&&j.delta&&j.delta.text){
-            full+=j.delta.text;bubble.textContent=full;$('#msgs').scrollTop=1e9;
+            full+=j.delta.text;
+            const k=full.indexOf('<svg');
+            bubble.textContent=k>=0?full.slice(0,k)+'🎨 рисувам...':full;
+            $('#msgs').scrollTop=1e9;
           }
         }catch{}
       }
     }
     if(!full) full='(няма отговор)';
-    bubble.textContent=full;
+    showReply(bubble,full);
     chat.push({role:'assistant',content:full}); put('chat',chat); say(full);
   }catch(e){bubble.textContent='Грешка: '+e.message.slice(0,250);chat.pop();}
-  busy=false; status();
+  busy=false; status(); $('#msgs').scrollTop=1e9;
 }
 
 /* Глас */
@@ -254,8 +370,31 @@ $('#save').onclick=()=>{
   status();
 };
 $('#set').onclick=e=>{if(e.target.id==='set')$('#set').style.display='none';};
-render(); status();
-if(cfg.wake) document.body.addEventListener('click',listen,{once:true});
-</script>
-</body>
-</html>
+
+/* ===== СТУДИО ===== */
+const cv=$('#cv');
+let photos=[], sel=0, tab='col', seed=Math.floor(Math.random()*1e6);
+let vblob=null,vurl=null,vext='webm',rendering=false;
+const E0={b:100,c:100,s:100,blur:0,sep:0,gray:0,vig:false};
+const E=Object.assign({rot:0,sq:false,txt:''},E0);
+const PRE={orig:{},bright:{b:110,c:108,s:128},bw:{gray:100,c:115},retro:{sep:65,c:95,b:105,s:90,vig:true},drama:{b:95,c:135,s:112,vig:true}};
+
+function hint(t){$('#hint').textContent=t;return false;}
+function ev(n){return Math.round(n/2)*2;}
+function dims(long){
+  const [a,b]=$('#asp').value.split(':').map(Number);
+  return a>=b?[ev(long),ev(long*b/a)]:[ev(long*a/b),ev(long)];
+}
+function cover(x,im,X,Y,w,h,r){
+  const sc=Math.max(w/im.width,h/im.height), sw=w/sc, sh=h/sc;
+  x.save();
+  if(r&&x.roundRect){x.beginPath();x.roundRect(X,Y,w,h,r);x.clip();}
+  x.drawImage(im,(im.width-sw)/2,(im.height-sh)/2,sw,sh,X,Y,w,h);
+  x.restore();
+}
+function trayDraw(){
+  const t=$('#tray'); t.innerHTML='';
+  photos.forEach((im,i)=>{
+    const d=document.createElement('div'); d.className='th'+(i===sel?' sel':'');
+    const m=document.createElement('img'); m.src=im.src;
+    m.onclick=()=>{sel=i;trayDraw();
