@@ -60,9 +60,10 @@ label{display:flex;gap:8px;align-items:center}
 <div id="set"><div>
   <b>Настройки</b>
   <input type="password" id="key" placeholder="Anthropic API ключ">
-  <textarea id="instr" rows="3" placeholder="Постоянни инструкции към бота (по желание)"></textarea>
+  <textarea id="instr" rows="4" placeholder="Постоянни инструкции към бота (по желание)"></textarea>
   <label><input type="checkbox" id="wake"> Събуждане с „Бот“</label>
   <label><input type="checkbox" id="speak"> Отговаряй на глас</label>
+  <label><input type="checkbox" id="web"> Търсене в интернет</label>
   <button class="gr" id="dn" type="button">Изтрий всички записи</button>
   <button id="save" type="button">Запази</button>
 </div></div>
@@ -72,7 +73,7 @@ const $=s=>document.querySelector(s);
 const get=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k));return v===null?d:v}catch{return d}};
 const put=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
 let chat=get('chat',[]), notes=get('notes',[]);
-let cfg=Object.assign({key:'',wake:true,speak:true,instr:''},get('cfg',{}));
+let cfg=Object.assign({key:'',wake:true,speak:true,instr:'',web:true},get('cfg',{}));
 let busy=false,speaking=false,awaiting=false,rec=null,pic=null;
 
 function status(){
@@ -158,17 +159,20 @@ async function send(text){
     {type:'image',source:{type:'base64',media_type:'image/jpeg',data:p.split(',')[1]}},
     {type:'text',text:q}
   ];
+  const body={model:'claude-sonnet-5-5',max_tokens:1500,stream:true,
+    system:'Ти си Бот - гласов асистент. Отговаряй на български, точно и кратко. Ако не си сигурен, кажи го честно. '
+      +'Не можеш да променяш настройките си или приложението и не твърдиш, че си го направил. '
+      +(cfg.web?'Имаш достъп до интернет чрез търсене. За време, новини, цени, резултати и други актуални неща търси, не гадай. ':'')
+      +'Ако потребителят иска да запомниш нещо, кажи му да напише "запиши ...". '
+      +(cfg.instr?'Инструкции от потребителя: '+cfg.instr+'. ':'')
+      +'Записи на потребителя: '+(notes.join('; ')||'няма'),
+    messages:msgs};
+  if(cfg.web) body.tools=[{type:'web_search_20250305',name:'web_search',max_uses:3}];
   try{
     const res=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'content-type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-sonnet-5-5',max_tokens:1024,stream:true,
-        system:'Ти си Бот - гласов асистент. Отговаряй на български, точно и кратко. Ако не си сигурен, кажи го честно. '
-          +'Не можеш да променяш настройките си или приложението и не твърдиш, че си го направил. '
-          +'Ако потребителят иска да запомниш нещо, кажи му да напише "запиши ...". '
-          +(cfg.instr?'Инструкции от потребителя: '+cfg.instr+'. ':'')
-          +'Записи на потребителя: '+(notes.join('; ')||'няма'),
-        messages:msgs})
+      body:JSON.stringify(body)
     });
     if(!res.ok) throw new Error(await res.text());
     const rd=res.body.getReader(), dec=new TextDecoder(); let buf='';
@@ -178,13 +182,23 @@ async function send(text){
       const lines=buf.split('\n'); buf=lines.pop();
       for(const ln of lines){
         if(!ln.startsWith('data: '))continue;
-        try{const j=JSON.parse(ln.slice(6));
-          if(j.type==='content_block_delta'&&j.delta.text){full+=j.delta.text;bubble.textContent=full;$('#msgs').scrollTop=1e9;}
+        try{
+          const j=JSON.parse(ln.slice(6));
+          if(j.type==='content_block_start'){
+            const t=j.content_block&&j.content_block.type;
+            if(t==='server_tool_use') bubble.textContent=(full?full+'\n\n':'')+'🔎 търся в интернет...';
+            else if(t==='text'&&full&&!full.endsWith('\n')) full+='\n\n';
+          }
+          if(j.type==='content_block_delta'&&j.delta&&j.delta.text){
+            full+=j.delta.text;bubble.textContent=full;$('#msgs').scrollTop=1e9;
+          }
         }catch{}
       }
     }
+    if(!full) full='(няма отговор)';
+    bubble.textContent=full;
     chat.push({role:'assistant',content:full}); put('chat',chat); say(full);
-  }catch(e){bubble.textContent='Грешка: '+e.message.slice(0,200);chat.pop();}
+  }catch(e){bubble.textContent='Грешка: '+e.message.slice(0,250);chat.pop();}
   busy=false; status();
 }
 
@@ -229,12 +243,12 @@ $('#in').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('#f
 $('#in').oninput=e=>{e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px';};
 $('#gear').onclick=()=>{
   $('#key').value=cfg.key; $('#instr').value=cfg.instr;
-  $('#wake').checked=cfg.wake; $('#speak').checked=cfg.speak;
+  $('#wake').checked=cfg.wake; $('#speak').checked=cfg.speak; $('#web').checked=cfg.web;
   $('#set').style.display='flex';
 };
 $('#dn').onclick=()=>{if(confirm('Да изтрия ли всички записи?')){notes=[];put('notes',notes);}};
 $('#save').onclick=()=>{
-  cfg={key:$('#key').value.trim(),instr:$('#instr').value.trim(),wake:$('#wake').checked,speak:$('#speak').checked};
+  cfg={key:$('#key').value.trim(),instr:$('#instr').value.trim(),wake:$('#wake').checked,speak:$('#speak').checked,web:$('#web').checked};
   put('cfg',cfg); $('#set').style.display='none';
   if(cfg.wake) listen(); else if(rec&&!awaiting) rec.stop();
   status();
