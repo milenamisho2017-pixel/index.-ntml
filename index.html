@@ -397,4 +397,200 @@ function trayDraw(){
   photos.forEach((im,i)=>{
     const d=document.createElement('div'); d.className='th'+(i===sel?' sel':'');
     const m=document.createElement('img'); m.src=im.src;
-    m.onclick=()=>{sel=i;trayDraw();
+    m.onclick=()=>{sel=i;trayDraw();if(tab==='edit')run();};
+    const b=document.createElement('button'); b.textContent='×';
+    b.onclick=e=>{e.stopPropagation();photos.splice(i,1);sel=Math.max(0,Math.min(sel,photos.length-1));trayDraw();run();};
+    d.append(m,b); t.appendChild(d);
+  });
+}
+function drawCollage(){
+  if(!photos.length) return hint('Добави снимки с ➕ Снимки');
+  const [W,H]=dims(1080), g=+$('#cgap').value, n=photos.length;
+  cv.width=W; cv.height=H; const x=cv.getContext('2d');
+  x.fillStyle=$('#cbg').value; x.fillRect(0,0,W,H);
+  const cols=Math.max(1,Math.min(n,Math.round(Math.sqrt(n*W/H)))), rows=Math.ceil(n/cols);
+  const cw=(W-g*(cols+1))/cols, ch=(H-g*(rows+1))/rows;
+  photos.forEach((im,i)=>{
+    const r=Math.floor(i/cols), c=i%cols;
+    const inRow=r===rows-1?n-(rows-1)*cols:cols, off=(cols-inRow)*(cw+g)/2;
+    cover(x,im,g+off+c*(cw+g),g+r*(ch+g),cw,ch,g>0?14:0);
+  });
+  return true;
+}
+function drawEdit(){
+  const img=photos[sel]; if(!img) return hint('Добави снимка с ➕ Снимки');
+  let sx=0,sy=0,sw=img.width,sh=img.height;
+  if(E.sq){const m=Math.min(sw,sh);sx=(sw-m)/2;sy=(sh-m)/2;sw=sh=m;}
+  const k=Math.min(1,1600/Math.max(sw,sh)), dw=Math.round(sw*k), dh=Math.round(sh*k);
+  const odd=E.rot%2===1; cv.width=odd?dh:dw; cv.height=odd?dw:dh;
+  const x=cv.getContext('2d');
+  x.save(); x.translate(cv.width/2,cv.height/2); x.rotate(E.rot*Math.PI/2);
+  x.filter='brightness('+E.b+'%) contrast('+E.c+'%) saturate('+E.s+'%) blur('+E.blur+'px) sepia('+E.sep+'%) grayscale('+E.gray+'%)';
+  x.drawImage(img,sx,sy,sw,sh,-dw/2,-dh/2,dw,dh);
+  x.restore();
+  if(E.vig){
+    const g=x.createRadialGradient(cv.width/2,cv.height/2,Math.min(cv.width,cv.height)*.35,cv.width/2,cv.height/2,Math.max(cv.width,cv.height)*.75);
+    g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,.65)');
+    x.fillStyle=g; x.fillRect(0,0,cv.width,cv.height);
+  }
+  if(E.txt){
+    const fs=Math.round(cv.width/14);
+    x.font='bold '+fs+'px system-ui'; x.textAlign='center'; x.fillStyle='#fff';
+    x.shadowColor='rgba(0,0,0,.7)'; x.shadowBlur=fs/4;
+    x.fillText(E.txt,cv.width/2,cv.height-fs*.8); x.shadowBlur=0;
+  }
+  return true;
+}
+const STY={
+  'Залез':{sky:['#2b1055','#c2417a','#ff9e5e','#ffe3a8'],sun:'#fff1c9',mt:['#7a3a72','#4a2358','#22123b'],sea:1},
+  'Планина':{sky:['#4f9bff','#a9d4ff','#f2faff'],sun:'#fffbe6',mt:['#a5bdd1','#6f8ca6','#37566f'],sea:0},
+  'Нощ':{sky:['#040a22','#0e1f50','#2a4382'],sun:'#f4f7ff',mt:['#1a2a55','#0e1a3a','#060d20'],stars:1,sea:1},
+  'Есен':{sky:['#f2a65a','#f7d08a','#fff2d2'],sun:'#fffaf0',mt:['#d08a46','#9a5a2a','#55301a'],sea:0},
+  'Море':{sky:['#2f74e0','#86c8ff','#eaf8ff'],sun:'#ffffff',mt:['#7aa7c7','#4b7899'],sea:1}
+};
+function ridge(x,W,H,y0,amp,col,R){
+  const p=[R()*9,R()*9,R()*9]; x.beginPath(); x.moveTo(0,H);
+  for(let i=0;i<=W;i+=6){
+    const t=i/W;
+    x.lineTo(i,y0-amp*(.55+.3*Math.sin(t*3.1+p[0])+.18*Math.sin(t*8+p[1])+.08*Math.sin(t*21+p[2])));
+  }
+  x.lineTo(W,H); x.closePath(); x.fillStyle=col; x.fill();
+}
+function drawLand(){
+  const S=STY[$('#lsty').value]||STY['Залез'], [W,H]=dims(1080);
+  cv.width=W; cv.height=H; const x=cv.getContext('2d');
+  let s=seed; const R=()=>(s=s*16807%2147483647)/2147483647;
+  const hz=H*(.58+R()*.08);
+  let g=x.createLinearGradient(0,0,0,hz);
+  S.sky.forEach((c,i)=>g.addColorStop(i/(S.sky.length-1),c));
+  x.fillStyle=g; x.fillRect(0,0,W,H);
+  if(S.stars){x.fillStyle='#fff';for(let i=0;i<220;i++){x.globalAlpha=.3+R()*.7;x.fillRect(R()*W,R()*hz*.85,1+R()*1.5,1+R()*1.5);}x.globalAlpha=1;}
+  const sx=W*(.25+R()*.5), sy=hz-H*(.08+R()*.18), sr=W*.06;
+  g=x.createRadialGradient(sx,sy,0,sx,sy,sr*6);
+  g.addColorStop(0,S.sun+'ff'); g.addColorStop(.2,S.sun+'aa'); g.addColorStop(1,S.sun+'00');
+  x.fillStyle=g; x.fillRect(0,0,W,H);
+  x.fillStyle=S.sun; x.beginPath(); x.arc(sx,sy,sr,0,7); x.fill();
+  x.filter='blur(14px)'; x.fillStyle=S.stars?'rgba(120,140,200,.25)':'rgba(255,255,255,.3)';
+  for(let i=0;i<5;i++){x.beginPath();x.ellipse(R()*W,H*(.08+R()*.3),W*(.1+R()*.15),H*(.02+R()*.03),0,0,7);x.fill();}
+  x.filter='none';
+  S.mt.forEach((c,i)=>ridge(x,W,H,hz+i*H*.035,H*(.2-.03*i),c,R));
+  if(S.sea){
+    g=x.createLinearGradient(0,hz,0,H);
+    g.addColorStop(0,S.sky[S.sky.length-2]); g.addColorStop(1,S.mt[S.mt.length-1]);
+    x.fillStyle=g; x.fillRect(0,hz,W,H-hz);
+    x.fillStyle=S.sun;
+    for(let i=0;i<45;i++){
+      const y=hz+8+R()*(H-hz-8), k=1-(y-hz)/(H-hz)*.4, w=(60+R()*220)*k;
+      x.globalAlpha=.08+R()*.25; x.fillRect(sx+(R()-.5)*70-w/2,y,w,2+R()*3);
+    }
+    x.globalAlpha=1;
+  }
+  return true;
+}
+function run(){
+  if(tab==='vid') return;
+  $('#vd').style.display='none'; cv.style.display='block'; hint('');
+  ({col:drawCollage,edit:drawEdit,land:drawLand})[tab]();
+}
+function vf(x,W,H,im,p,kb){
+  const sc=Math.max(W/im.width,H/im.height)*(kb?1+.12*p:1), dw=im.width*sc, dh=im.height*sc;
+  x.drawImage(im,(W-dw)/2,(H-dh)/2,dw,dh);
+}
+async function makeVideo(){
+  if(rendering) return;
+  if(!photos.length) return hint('Добави снимки с ➕ Снимки');
+  if(!window.MediaRecorder||!cv.captureStream) return hint('Този браузър не поддържа запис на видео.');
+  const mime=['video/mp4;codecs=avc1.42E01E','video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'].find(t=>MediaRecorder.isTypeSupported(t));
+  if(!mime) return hint('Няма поддържан видео формат.');
+  const D=+$('#vdur').value, kb=$('#vkb').checked, ttl=$('#vtxt').value.trim();
+  const [W,H]=dims(720); cv.width=W; cv.height=H;
+  $('#vd').style.display='none'; cv.style.display='block';
+  const x=cv.getContext('2d');
+  const frame=el=>{
+    const per=D*1000/photos.length, i=Math.min(photos.length-1,Math.floor(el/per)), lp=Math.min(el-i*per,per), fade=Math.min(800,per/2);
+    x.globalAlpha=1; x.fillStyle='#000'; x.fillRect(0,0,W,H);
+    vf(x,W,H,photos[i],lp/per,kb);
+    if(i<photos.length-1&&lp>per-fade){x.globalAlpha=(lp-(per-fade))/fade;vf(x,W,H,photos[i+1],0,kb);x.globalAlpha=1;}
+    if(ttl){const fs=Math.round(W/16);x.font='bold '+fs+'px system-ui';x.textAlign='center';x.fillStyle='#fff';x.shadowColor='rgba(0,0,0,.7)';x.shadowBlur=fs/3;x.fillText(ttl,W/2,H-fs*1.2);x.shadowBlur=0;}
+  };
+  rendering=true; $('#gen').disabled=true; frame(0);
+  const rc=new MediaRecorder(cv.captureStream(30),{mimeType:mime,videoBitsPerSecond:4000000});
+  const ch=[]; rc.ondataavailable=e=>{if(e.data.size)ch.push(e.data);};
+  const stopped=new Promise(r=>{rc.onstop=r;});
+  rc.start(); const t0=performance.now();
+  await new Promise(res=>{
+    const f=()=>{
+      const el=performance.now()-t0;
+      if(el>=D*1000){res();return;}
+      frame(el); hint('Записвам... още '+Math.ceil(D-el/1000)+' с'); requestAnimationFrame(f);
+    };
+    f();
+  });
+  rc.stop(); await stopped;
+  vblob=new Blob(ch,{type:mime.split(';')[0]}); vext=mime.includes('mp4')?'mp4':'webm';
+  if(vurl) URL.revokeObjectURL(vurl);
+  vurl=URL.createObjectURL(vblob);
+  const vd=$('#vd'); vd.src=vurl; vd.style.display='block'; cv.style.display='none';
+  hint('Готово! Натисни 💾 Запази.'); rendering=false; $('#gen').disabled=false;
+}
+function syncE(){
+  $$('#p-edit [data-k]').forEach(el=>{
+    const v=E[el.dataset.k];
+    if(el.type==='checkbox') el.checked=!!v; else el.value=v;
+  });
+}
+function saveOut(){
+  if($('#vd').style.display==='block'&&vurl){dl(vurl,'video-'+Date.now()+'.'+vext);return;}
+  cv.toBlob(b=>dl(URL.createObjectURL(b),'bot-'+Date.now()+'.png'),'image/png');
+}
+async function shareOut(){
+  let blob,name;
+  if($('#vd').style.display==='block'&&vblob){blob=vblob;name='video.'+vext;}
+  else{blob=await new Promise(r=>cv.toBlob(r,'image/png'));name='bot.png';}
+  const f=new File([blob],name,{type:blob.type});
+  if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f]});}catch{}}
+  else saveOut();
+}
+
+$('#art').onclick=()=>{$('#stu').style.display='flex';run();};
+$('#sback').onclick=()=>{$('#stu').style.display='none';};
+$('#addp').onclick=()=>$('#files').click();
+$('#files').onchange=async e=>{
+  for(const f of e.target.files){
+    if(photos.length>=12) break;
+    await new Promise(r=>{const im=new Image();im.onload=()=>{photos.push(im);r();};im.onerror=r;im.src=URL.createObjectURL(f);});
+  }
+  e.target.value=''; sel=Math.min(sel,Math.max(0,photos.length-1)); trayDraw(); run();
+};
+$$('.tabs button').forEach(b=>b.onclick=()=>{
+  tab=b.dataset.t;
+  $$('.tabs button').forEach(x=>x.classList.toggle('on',x===b));
+  $$('.pn').forEach(p=>p.classList.toggle('on',p.id==='p-'+tab));
+  if(tab==='vid'){hint('Натисни „Създай“, за да запиша видеото.');}
+  run();
+});
+$('#stu').addEventListener('input',e=>{
+  const el=e.target,k=el.dataset.k;
+  if(k) E[k]=el.type==='checkbox'?el.checked:el.type==='text'?el.value:+el.value;
+  if(el.id==='vdur') $('#vdv').textContent=el.value+' с';
+  run();
+});
+$$('#pre button').forEach(b=>b.onclick=()=>{Object.assign(E,E0,PRE[b.dataset.p]);syncE();run();});
+$('#rot').onclick=()=>{E.rot=(E.rot+1)%4;run();};
+$('#lnew').onclick=()=>{seed=Math.floor(Math.random()*1e6);run();};
+$('#ladd').onclick=()=>{
+  if(tab!=='land') return;
+  if(photos.length>=12) return hint('Максимум 12 снимки.');
+  const im=new Image();
+  im.onload=()=>{photos.push(im);sel=photos.length-1;trayDraw();hint('Добавено към снимките.');};
+  im.src=cv.toDataURL('image/jpeg',.92);
+};
+$('#gen').onclick=()=>{if(tab==='vid') makeVideo(); else run();};
+$('#sv').onclick=saveOut;
+$('#shr').onclick=shareOut;
+
+render(); status();
+if(cfg.wake) document.body.addEventListener('click',listen,{once:true});
+</script>
+</body>
+</html>
