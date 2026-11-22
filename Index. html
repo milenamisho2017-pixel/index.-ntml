@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#212121">
+<title>Бот</title>
+<style>
+*{box-sizing:border-box;margin:0}
+body{background:#212121;color:#ececec;font:16px/1.5 system-ui,sans-serif;height:100dvh;display:flex;flex-direction:column}
+header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #333}
+header b{font-size:18px}
+.ib{background:none;border:0;color:#ececec;font-size:20px;padding:6px 10px;border-radius:8px;cursor:pointer}
+.ib:active{background:#333}
+#msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px}
+.m{max-width:85%;padding:10px 14px;border-radius:18px;white-space:pre-wrap;word-wrap:break-word}
+.u{align-self:flex-end;background:#2f2f2f}
+.a{align-self:flex-start}
+.sys{align-self:center;color:#888;font-size:13px;text-align:center}
+form{display:flex;gap:8px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));align-items:flex-end}
+#in{flex:1;background:#2f2f2f;color:#ececec;border:0;border-radius:24px;padding:12px 16px;font:inherit;resize:none;max-height:120px;outline:none}
+.c{width:44px;height:44px;border-radius:50%;border:0;font-size:18px;cursor:pointer}
+#mic{background:#2f2f2f;color:#fff}
+#mic.on{background:#e5484d;animation:p 1s infinite}
+#send{background:#fff;color:#000}
+@keyframes p{50%{opacity:.5}}
+#set{position:fixed;inset:0;background:#000c;display:none;align-items:center;justify-content:center;padding:20px}
+#set div{background:#2a2a2a;padding:20px;border-radius:16px;width:100%;max-width:400px;display:flex;flex-direction:column;gap:12px}
+#set input[type=password]{background:#1a1a1a;color:#fff;border:1px solid #444;border-radius:8px;padding:10px}
+#set button{background:#fff;border:0;border-radius:8px;padding:10px;font:inherit}
+label{display:flex;gap:8px;align-items:center}
+</style>
+</head>
+<body>
+<header>
+  <b>🤖 Бот</b>
+  <span id="st" style="font-size:13px;color:#888"></span>
+  <button class="ib" id="gear">⚙️</button>
+</header>
+<div id="msgs"></div>
+<form id="f">
+  <button type="button" class="c" id="mic">🎤</button>
+  <textarea id="in" rows="1" placeholder="Напиши съобщение..."></textarea>
+  <button class="c" id="send">➤</button>
+</form>
+<div id="set"><div>
+  <b>Настройки</b>
+  <input type="password" id="key" placeholder="Anthropic API ключ">
+  <label><input type="checkbox" id="wake"> Събуждане с „Бот“</label>
+  <label><input type="checkbox" id="speak"> Отговаряй на глас</label>
+  <button id="save">Запази</button>
+</div></div>
+
+<script>
+const $=s=>document.querySelector(s);
+const get=(k,d)=>JSON.parse(localStorage.getItem(k)||JSON.stringify(d));
+const put=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+let chat=get('chat',[]), notes=get('notes',[]), cfg=get('cfg',{key:'',wake:true,speak:true});
+let busy=false, speaking=false, awaiting=false, rec=null;
+
+function add(role,text){
+  const d=document.createElement('div');
+  d.className='m '+(role==='user'?'u':role==='sys'?'sys':'a');
+  d.textContent=text; $('#msgs').appendChild(d);
+  $('#msgs').scrollTop=1e9; return d;
+}
+function render(){
+  $('#msgs').innerHTML='';
+  if(!chat.length) add('sys','Здравей! Аз съм Бот. Кажи „Бот“ или ми пиши.');
+  chat.forEach(m=>add(m.role,m.content));
+}
+function say(t){
+  if(!cfg.speak||!window.speechSynthesis) return;
+  const u=new SpeechSynthesisUtterance(t); u.lang='bg-BG';
+  u.onstart=()=>speaking=true; u.onend=()=>speaking=false; u.onerror=()=>speaking=false;
+  speechSynthesis.cancel(); speechSynthesis.speak(u);
+}
+function local(t){
+  const l=t.toLowerCase().trim();
+  let m=t.trim().match(/^(запиши|запомни)[\s:,]+(.+)/i);
+  if(m){notes.push(m[2]);put('notes',notes);return 'Записах: '+m[2];}
+  if(/изтрий (всичко|бележките|записите)/.test(l)){notes=[];put('notes',notes);return 'Изтрих всички записи.';}
+  if(/изтрий (чата|разговора)/.test(l)){chat=[];put('chat',chat);render();return 'Изтрих разговора.';}
+  if(/(покажи|прочети).*(бележките|записите)/.test(l))
+    return notes.length?'Записи:\n- '+notes.join('\n- '):'Нямам записи.';
+  return null;
+}
+async function send(text){
+  text=text.trim(); if(!text||busy) return;
+  const r=local(text);
+  chat.push({role:'user',content:text}); add('user',text);
+  if(r!==null){chat.push({role:'assistant',content:r});add('assistant',r);put('chat',chat);say(r);return;}
+  if(!cfg.key){add('sys','Добави API ключ в ⚙️ Настройки.');chat.pop();return;}
+  busy=true; $('#st').textContent='пише...';
+  const bubble=add('assistant','…'); let full='';
+  let msgs=chat.slice(-20); while(msgs.length&&msgs[0].role!=='user') msgs.shift();
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'content-type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-sonnet-5-5',max_tokens:1024,stream:true,
+        system:'Ти си Бот - гласов асистент. Отговаряй на български, точно и кратко. Ако не си сигурен, кажи го честно. Записи на потребителя: '+(notes.join('; ')||'няма'),
+        messages:msgs})
+    });
+    if(!res.ok) throw new Error(await res.text());
+    const rd=res.body.getReader(), dec=new TextDecoder(); let buf='';
+    while(true){
+      const {done,value}=await rd.read(); if(done)break;
+      buf+=dec.decode(value,{stream:true});
+      const lines=buf.split('\n'); buf=lines.pop();
+      for(const ln of lines){
+        if(!ln.startsWith('data: '))continue;
+        try{const j=JSON.parse(ln.slice(6));
+          if(j.type==='content_block_delta'&&j.delta.text){full+=j.delta.text;bubble.textContent=full;$('#msgs').scrollTop=1e9;}
+        }catch{}
+      }
+    }
+    chat.push({role:'assistant',content:full}); put('chat',chat); say(full);
+  }catch(e){bubble.textContent='Грешка: '+e.message.slice(0,200);chat.pop();}
+  busy=false; $('#st').textContent=cfg.wake?'слушам „Бот“':'';
+}
+
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+function listen(){
+  if(!SR||rec) return;
+  rec=new SR(); rec.lang='bg-BG'; rec.continuous=true; rec.interimResults=false;
+  rec.onresult=e=>{
+    if(speaking) return;
+    const t=e.results[e.results.length-1][0].transcript.trim();
+    const m=t.match(/^(хей |ей )?бот[\s,.!:]*(.*)$/i);
+    if(m){ if(m[2]) send(m[2]); else {awaiting=true;$('#mic').classList.add('on');$('#st').textContent='слушам...';} }
+    else if(awaiting){awaiting=false;$('#mic').classList.remove('on');send(t);}
+  };
+  rec.onend=()=>{rec=null; if(cfg.wake||awaiting) setTimeout(listen,300);};
+  rec.onerror=()=>{};
+  try{rec.start();}catch{}
+}
+$('#mic').onclick=()=>{awaiting=true;$('#mic').classList.add('on');if(!rec)listen();};
+
+$('#f').onsubmit=e=>{e.preventDefault();const t=$('#in').value;$('#in').value='';$('#in').style.height='auto';send(t);};
+$('#in').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('#f').requestSubmit();}};
+$('#in').oninput=e=>{e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px';};
+$('#gear').onclick=()=>{$('#key').value=cfg.key;$('#wake').checked=cfg.wake;$('#speak').checked=cfg.speak;$('#set').style.display='flex';};
+$('#save').onclick=()=>{
+  cfg={key:$('#key').value.trim(),wake:$('#wake').checked,speak:$('#speak').checked};
+  put('cfg',cfg);$('#set').style.display='none';
+  if(cfg.wake)listen(); else if(rec){const r=rec;rec=null;r.stop();}
+  $('#st').textContent=cfg.wake?'слушам „Бот“':'';
+};
+render();
+if(cfg.wake){$('#st').textContent='слушам „Бот“';document.body.addEventListener('click',listen,{once:true});}
+</script>
+</body>
+</html>
