@@ -1,5 +1,9 @@
 /* extras.js - реални карти (OpenStreetMap) и реални снимки (Wikimedia) за Бот */
 (function(){
+  var sty=document.createElement('style');
+  sty.textContent='#msgs>*{flex-shrink:0}';
+  document.head.appendChild(sty);
+
   var RE='\\[\\[(карта|снимка):\\s*([^\\]]+)\\]\\]';
   var hist=false;
   function tagsOf(t){var out=[],re=new RegExp(RE,'gi'),m;while((m=re.exec(t)))out.push([m[1].toLowerCase(),m[2].trim()]);return out;}
@@ -32,7 +36,7 @@
       var f=document.createElement('iframe');
       f.src='https://www.openstreetmap.org/export/embed.html?bbox='+bbox+'&layer=mapnik&marker='+g.lat+','+g.lon;
       f.loading='lazy';
-      st(f,'width:100%;height:280px;border:0;border-radius:12px;background:#333;max-width:none');
+      st(f,'width:100%;height:280px;border:0;border-radius:12px;background:#333;max-width:none;display:block');
       c.appendChild(f);
       var cap=document.createElement('div');st(cap,'font-size:13px;color:#aaa;margin:4px 0');cap.textContent=g.name.slice(0,120);c.appendChild(cap);
       c.appendChild(lnk('🔎 Голяма карта','https://www.openstreetmap.org/?mlat='+g.lat+'&mlon='+g.lon+'#map=15/'+g.lat+'/'+g.lon));
@@ -95,7 +99,7 @@
   }
   function widgetCmd(t){
     var s=t.trim(),m;
-    if(/^(къде съм|покажи къде съм|моето местоположение|карта тук|карта около мен)\??$/i.test(s)) return '[[карта: @тук]]';
+    if(s.length<45&&(/къде съм|къде се намирам|моето местоположение/i.test(s)||/^карта\s+(?:тук|около мен)$/i.test(s))) return '[[карта: @тук]]';
     if((m=s.match(/^(?:покажи(?:\s+ми)?\s+)?карта\s+(?:на\s+)?(.{2,})$/i))) return '[[карта: '+m[1].trim()+']]';
     if((m=s.match(/^(?:покажи(?:\s+ми)?\s+)?(?:реални\s+)?(?:снимки|снимка|фото|фотографии)\s+(?:на\s+)?(.{2,})$/i))) return '[[снимка: '+m[1].trim()+']]';
     return null;
@@ -112,7 +116,7 @@
   window.local=function(t){var w=widgetCmd(t);return w?w:_local(t);};
   window.say=function(t){t=strip(t||'');if(t)_say(t);};
 
-  var EX=' Ако потребителят иска карта на място, добави в отговора ред [[карта: място]]. Ако иска реална снимка на място, обект, животно или растение, добави ред [[снимка: обект]] (по възможност на английски или с оригиналното име). Таговете показват истинска карта от OpenStreetMap и истински снимки от Wikimedia, така че не казвай, че не можеш. Не можеш да генерираш нови фотореалистични снимки. Когато рисуваш SVG, прави го богат и красив: градиенти, слоеве, сенки и детайли.';
+  var EX=' Ако потребителят иска карта на място, добави в отговора ред [[карта: място]]. Ако иска реална снимка на място, обект, животно или растение, добави ред [[снимка: обект]] (по възможност на английски или с оригиналното име). Таговете показват истинска карта от OpenStreetMap и истински снимки от Wikimedia, така че не казвай, че не можеш. В историята таговете [[карта: ...]] и [[снимка: ...]] означават, че на потребителя вече е показана карта или снимки. Не можеш да генерираш нови фотореалистични снимки. Когато рисуваш SVG, прави го богат и красив: градиенти, слоеве, сенки и детайли.';
   var _fetch=window.fetch.bind(window);
   window.fetch=function(u,o){
     try{
