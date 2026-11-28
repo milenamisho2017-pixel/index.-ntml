@@ -592,3 +592,215 @@ function drawLand(){
   x.filter='blur(14px)'; x.fillStyle=S.stars?'rgba(120,140,200,.25)':'rgba(255,255,255,.3)';
   for(let i=0;i<5;i++){x.beginPath();x.ellipse(R()*W,H*(.08+R()*.3),W*(.1+R()*.15),H*(.02+R()*.03),0,0,7);x.fill();}
   x.filter='none';
+  S.mt.forEach((c,i)=>ridge(x,W,H,hz+i*H*.035,H*(.2-.03*i),c,R));
+  if(S.sea){
+    g=x.createLinearGradient(0,hz,0,H);
+    g.addColorStop(0,S.sky[S.sky.length-2]); g.addColorStop(1,S.mt[S.mt.length-1]);
+    x.fillStyle=g; x.fillRect(0,hz,W,H-hz);
+    x.fillStyle=S.sun;
+    for(let i=0;i<45;i++){
+      const y=hz+8+R()*(H-hz-8), k=1-(y-hz)/(H-hz)*.4, w=(60+R()*220)*k;
+      x.globalAlpha=.08+R()*.25; x.fillRect(sx+(R()-.5)*70-w/2,y,w,2+R()*3);
+    }
+    x.globalAlpha=1;
+  }
+  return true;
+}
+function run(){
+  if(tab==='vid'||tab==='clip') return;
+  $('#vd').style.display='none'; cv.style.display='block'; hint('');
+  ({col:drawCollage,edit:drawEdit,land:drawLand})[tab]();
+}
+function vf(x,W,H,im,p,kb){
+  const sc=Math.max(W/im.width,H/im.height)*(kb?1+.12*p:1), dw=im.width*sc, dh=im.height*sc;
+  x.drawImage(im,(W-dw)/2,(H-dh)/2,dw,dh);
+}
+function pickMime(){
+  return ['video/mp4;codecs=avc1.42E01E','video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'].find(t=>MediaRecorder.isTypeSupported(t));
+}
+function finishVideo(mime,ch){
+  vblob=new Blob(ch,{type:mime.split(';')[0]}); vext=mime.includes('mp4')?'mp4':'webm';
+  if(vurl) URL.revokeObjectURL(vurl);
+  vurl=URL.createObjectURL(vblob);
+  const vd=$('#vd'); vd.src=vurl; vd.style.display='block'; cv.style.display='none';
+  hint('Готово! Натисни 💾 Запази.'); rendering=false; $('#gen').disabled=false;
+}
+function failVideo(m){hint(m);rendering=false;$('#gen').disabled=false;return false;}
+async function makeVideo(){
+  if(rendering) return;
+  if(!photos.length) return hint('Добави снимки с ➕ Снимки');
+  if(!window.MediaRecorder||!cv.captureStream) return hint('Този браузър не поддържа запис на видео.');
+  const mime=pickMime(); if(!mime) return hint('Няма поддържан видео формат.');
+  const D=+$('#vdur').value, kb=$('#vkb').checked, ttl=$('#vtxt').value.trim();
+  const [W,H]=dims(720); cv.width=W; cv.height=H;
+  $('#vd').style.display='none'; cv.style.display='block';
+  const x=cv.getContext('2d');
+  const frame=el=>{
+    const per=D*1000/photos.length, i=Math.min(photos.length-1,Math.floor(el/per)), lp=Math.min(el-i*per,per), fade=Math.min(800,per/2);
+    x.globalAlpha=1; x.fillStyle='#000'; x.fillRect(0,0,W,H);
+    vf(x,W,H,photos[i],lp/per,kb);
+    if(i<photos.length-1&&lp>per-fade){x.globalAlpha=(lp-(per-fade))/fade;vf(x,W,H,photos[i+1],0,kb);x.globalAlpha=1;}
+    if(ttl){const fs=Math.round(W/16);x.font='bold '+fs+'px system-ui';x.textAlign='center';x.fillStyle='#fff';x.shadowColor='rgba(0,0,0,.7)';x.shadowBlur=fs/3;x.fillText(ttl,W/2,H-fs*1.2);x.shadowBlur=0;}
+  };
+  rendering=true; $('#gen').disabled=true;
+  try{
+    frame(0);
+    const rc=new MediaRecorder(cv.captureStream(30),{mimeType:mime,videoBitsPerSecond:4000000});
+    const ch=[]; rc.ondataavailable=e=>{if(e.data.size)ch.push(e.data);};
+    const stopped=new Promise(r=>{rc.onstop=r;});
+    rc.start(); const t0=performance.now();
+    await new Promise(res=>{
+      const f=()=>{
+        const el=performance.now()-t0;
+        if(el>=D*1000){res();return;}
+        frame(el); hint('Записвам... още '+Math.ceil(D-el/1000)+' с'); requestAnimationFrame(f);
+      };
+      f();
+    });
+    rc.stop(); await stopped; finishVideo(mime,ch);
+  }catch(e){failVideo('Грешка при записа на видеото.');}
+}
+/* Сглобяване на клипове */
+function clipsDraw(){
+  const l=$('#clist'); l.innerHTML=''; let tot=0;
+  clips.forEach((c,i)=>{
+    tot+=c.dur;
+    const r=document.createElement('div'); r.className='cr';
+    const s=document.createElement('span'); s.textContent=(i+1)+'. '+c.name+' ('+c.dur.toFixed(1)+' с)';
+    const u=document.createElement('button'); u.textContent='↑';
+    u.onclick=()=>{if(i>0){[clips[i-1],clips[i]]=[clips[i],clips[i-1]];clipsDraw();}};
+    const b=document.createElement('button'); b.textContent='×';
+    b.onclick=()=>{URL.revokeObjectURL(c.url);clips.splice(i,1);clipsDraw();};
+    r.append(s,u,b); l.appendChild(r);
+  });
+  $('#ctot').textContent=clips.length?'Общо: '+tot.toFixed(1)+' с'+(tot>30?' (ще се вземат първите 30 с)':''):'';
+}
+$('#addc').onclick=()=>$('#cfiles').click();
+$('#cfiles').onchange=async e=>{
+  for(const f of e.target.files){
+    if(clips.length>=8) break;
+    await new Promise(r=>{
+      const v=document.createElement('video'); v.preload='auto'; v.playsInline=true; v.src=URL.createObjectURL(f);
+      v.onloadedmetadata=()=>{if(isFinite(v.duration)&&v.duration>0) clips.push({name:f.name.slice(0,22),url:v.src,el:v,dur:v.duration}); r();};
+      v.onerror=r;
+    });
+  }
+  e.target.value=''; clipsDraw();
+};
+async function makeClips(){
+  if(rendering) return;
+  if(!clips.length) return hint('Добави клипове с 🎞️');
+  if(!window.MediaRecorder||!cv.captureStream) return hint('Този браузър не поддържа запис на видео.');
+  const mime=pickMime(); if(!mime) return hint('Няма поддържан видео формат.');
+  const [W,H]=dims(720); cv.width=W; cv.height=H;
+  $('#vd').style.display='none'; cv.style.display='block';
+  const x=cv.getContext('2d'), fade=$('#cfade').checked, ttl=$('#ctxt').value.trim();
+  const total=Math.min(30,clips.reduce((a,c)=>a+c.dur,0));
+  rendering=true; $('#gen').disabled=true;
+  try{
+    const tracks=[...cv.captureStream(30).getVideoTracks()];
+    try{
+      if(!AC){AC=new (window.AudioContext||window.webkitAudioContext)();AD=AC.createMediaStreamDestination();}
+      await AC.resume();
+      clips.forEach(c=>{if(!c.node){c.node=AC.createMediaElementSource(c.el);c.node.connect(AD);}});
+      tracks.push(...AD.stream.getAudioTracks());
+    }catch{}
+    const rc=new MediaRecorder(new MediaStream(tracks),{mimeType:mime,videoBitsPerSecond:4000000});
+    const ch=[]; rc.ondataavailable=e=>{if(e.data.size)ch.push(e.data);};
+    const stopped=new Promise(r=>{rc.onstop=r;});
+    x.fillStyle='#000'; x.fillRect(0,0,W,H);
+    rc.start(); let used=0;
+    for(const c of clips){
+      const room=30-used; if(room<=.2) break;
+      const len=Math.min(c.dur,room);
+      c.el.currentTime=0;
+      try{await c.el.play();}catch{c.el.muted=true;try{await c.el.play();}catch{continue;}}
+      const t0=performance.now();
+      await new Promise(res=>{
+        const f=()=>{
+          const t=(performance.now()-t0)/1000;
+          if(t>=len||c.el.ended){res();return;}
+          x.globalAlpha=1; x.fillStyle='#000'; x.fillRect(0,0,W,H);
+          cover(x,c.el,0,0,W,H,0);
+          if(fade){
+            const a=Math.max(0,1-t/.3,1-(len-t)/.3);
+            if(a>0){x.globalAlpha=Math.min(1,a);x.fillStyle='#000';x.fillRect(0,0,W,H);x.globalAlpha=1;}
+          }
+          if(ttl&&used+t<3){
+            const fs=Math.round(W/16);x.font='bold '+fs+'px system-ui';x.textAlign='center';x.fillStyle='#fff';
+            x.shadowColor='rgba(0,0,0,.7)';x.shadowBlur=fs/3;x.fillText(ttl,W/2,H-fs*1.2);x.shadowBlur=0;
+          }
+          hint('Записвам... още '+Math.ceil(total-used-t)+' с');
+          requestAnimationFrame(f);
+        };
+        f();
+      });
+      c.el.pause(); used+=len;
+    }
+    rc.stop(); await stopped; finishVideo(mime,ch);
+  }catch(e){failVideo('Грешка при сглобяването на клиповете.');}
+}
+function syncE(){
+  $$('#p-edit [data-k]').forEach(el=>{
+    const v=E[el.dataset.k];
+    if(el.type==='checkbox') el.checked=!!v; else el.value=v;
+  });
+}
+function saveOut(){
+  if($('#vd').style.display==='block'&&vurl){dl(vurl,'video-'+Date.now()+'.'+vext);return;}
+  cv.toBlob(b=>dl(URL.createObjectURL(b),'bot-'+Date.now()+'.png'),'image/png');
+}
+async function shareOut(){
+  let blob,name;
+  if($('#vd').style.display==='block'&&vblob){blob=vblob;name='video.'+vext;}
+  else{blob=await new Promise(r=>cv.toBlob(r,'image/png'));name='bot.png';}
+  const f=new File([blob],name,{type:blob.type});
+  if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f]});}catch{}}
+  else saveOut();
+}
+
+$('#art').onclick=()=>{$('#stu').style.display='flex';run();};
+$('#sback').onclick=()=>{$('#stu').style.display='none';};
+$('#addp').onclick=()=>$('#files').click();
+$('#files').onchange=async e=>{
+  for(const f of e.target.files){
+    if(photos.length>=12) break;
+    await new Promise(r=>{const im=new Image();im.onload=()=>{photos.push(im);r();};im.onerror=r;im.src=URL.createObjectURL(f);});
+  }
+  e.target.value=''; sel=Math.min(sel,Math.max(0,photos.length-1)); trayDraw(); run();
+};
+$$('.tabs button').forEach(b=>b.onclick=()=>{
+  tab=b.dataset.t;
+  $$('.tabs button').forEach(x=>x.classList.toggle('on',x===b));
+  $$('.pn').forEach(p=>p.classList.toggle('on',p.id==='p-'+tab));
+  if(tab==='vid') hint('Натисни „Създай“, за да запиша видеото от снимките.');
+  if(tab==='clip') hint('Добави клипове и натисни „Създай“.');
+  run();
+});
+$('#stu').addEventListener('input',e=>{
+  const el=e.target,k=el.dataset.k;
+  if(k) E[k]=el.type==='checkbox'?el.checked:el.type==='text'?el.value:+el.value;
+  if(el.id==='vdur') $('#vdv').textContent=el.value+' с';
+  run();
+});
+$$('#pre button').forEach(b=>b.onclick=()=>{Object.assign(E,E0,PRE[b.dataset.p]);syncE();run();});
+$('#rot').onclick=()=>{E.rot=(E.rot+1)%4;run();};
+$('#lnew').onclick=()=>{seed=Math.floor(Math.random()*1e6);run();};
+$('#ladd').onclick=()=>{
+  if(tab!=='land') return;
+  if(photos.length>=12) return hint('Максимум 12 снимки.');
+  const im=new Image();
+  im.onload=()=>{photos.push(im);sel=photos.length-1;trayDraw();hint('Добавено към снимките.');};
+  im.src=cv.toDataURL('image/jpeg',.92);
+};
+$('#gen').onclick=()=>{if(tab==='vid') makeVideo(); else if(tab==='clip') makeClips(); else run();};
+$('#sv').onclick=saveOut;
+$('#shr').onclick=shareOut;
+
+render(); status();
+if(navigator.storage&&navigator.storage.persist) navigator.storage.persist();
+if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+if(cfg.wake) document.body.addEventListener('click',listen,{once:true});
+</script>
+</body>
+</html>
