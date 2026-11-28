@@ -1,0 +1,16 @@
+{
+  "name": "Бот",
+  "short_name": "Бот",
+  "description": "Гласов ИИ асистент",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#212121",
+  "theme_color": "#212121",
+  "lang": "bg",
+  "icons": [
+    {"src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"},
+    {"src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable"}
+  ]
+}
