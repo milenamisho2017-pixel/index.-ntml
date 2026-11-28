@@ -801,6 +801,6 @@ render(); status();
 if(navigator.storage&&navigator.storage.persist) navigator.storage.persist();
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
 if(cfg.wake) document.body.addEventListener('click',listen,{once:true});
-</script>
+</script><script src="extras.js"></script>
 </body>
 </html>
